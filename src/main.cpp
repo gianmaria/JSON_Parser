@@ -4,12 +4,26 @@
 
 int main()
 {
-    const char *input = "+3.34e+02";
-    printf("str: '%s'  ", input);
+
+#if 0
+    const char *input = "+9.94758600e+2";
+    printf("input str: '%s'  ", input);
 
     JSON_Value value = parse_json_number(&input);
 
-    printf("num: '%f'  e: '%.2e'\n", value.number, value.number);
+    printf("num: '%f'\n        e: '%+.8e'\n", value.number, value.number);
+
+#endif // 0
+
+
+#if 1
+    const char *input = R"FOO([true, [false, null, []], 123.45e3, ["gatto", "topo"]])FOO";
+
+    JSON_Value value = parse_json(input);
+
+#endif // 0
+
+    int stop = 0;
 
 #if 0
     char *json_input = read_entire_file("data\\easy_test.json");

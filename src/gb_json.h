@@ -41,7 +41,7 @@ struct JSON_Value
     {
         JSON_Object *object;
         JSON_Array *array;
-        char string[64];
+        char string[6];
         double number;
     };
 };
@@ -54,39 +54,39 @@ struct JSON_Object_Pair
 
 struct JSON_Object
 {
-    JSON_Object_Pair data[128];
+    JSON_Object_Pair data[8];
     u32 count;
-
-    void add_pair(const JSON_Object_Pair *pair)
-    {
-        if (count < ArrayCount(data))
-        {
-            data[count++] = *pair;
-        }
-        else
-        {
-            Assert(!"JSON_Object is full!");
-        }
-    }
 };
+
+void add_pair(JSON_Object *obj, const JSON_Object_Pair *pair)
+{
+    if (obj->count < ArrayCount(obj->data))
+    {
+        obj->data[obj->count++] = *pair;
+    }
+    else
+    {
+        Assert(!"JSON_Object is full!");
+    }
+}
 
 struct JSON_Array
 {
-    JSON_Value data[128];
+    JSON_Value data[8];
     u32 count;
-
-    void add(const JSON_Value *value)
-    {
-        if (count < ArrayCount(data))
-        {
-            data[count++] = *value;
-        }
-        else
-        {
-            Assert(!"JSON_Array is full!");
-        }
-    }
 };
+
+void add(JSON_Array *arr, const JSON_Value *value)
+{
+    if (arr->count < ArrayCount(arr->data))
+    {
+        arr->data[arr->count++] = *value;
+    }
+    else
+    {
+        Assert(!"JSON_Array is full!");
+    }
+}
 
 
 char *read_entire_file(const char *file_path)
@@ -124,6 +124,7 @@ char *read_entire_file(const char *file_path)
     return res;
 }
 
+
 JSON_Value *new_json_value(enum JSON_Type type)
 {
     JSON_Value *value = 0;
@@ -149,80 +150,91 @@ JSON_Value *new_json_value(enum JSON_Type type)
 }
 
 
-JSON_Value parse_json_string(char **source)
+
+JSON_Value parse_json(const char *source);
+
+JSON_Value parse_json_value(const char **source);
+
+JSON_Value parse_json_array(const char **source);
+
+JSON_Value parse_json_string(const char **at)
 {
     JSON_Value json_value = { };
     json_value.type = JSON_Type_String;
 
-    char *c = *source;
     u32 str_idx = 0;
 
-    if (c)
+    if (*at)
     {
-        Assert(*c == '"');
-        ++c;
+        Assert(*at[0] == '"');
+        ++*at;
 
-        while (*c != '"')
+        while (*at[0] != '"')
         {
-            json_value.string[str_idx++] = *c;
+            if (!(strlen(json_value.string) < sizeof(json_value.string) - 1))
+            {
+                break;
+            }
+            json_value.string[str_idx++] = *at[0];
+            ++*at;
         }
 
-        ++c; // skip closing "
-
-        *source = c;
+        ++*at; // skip closing "
     }
 
     return json_value;
 }
 
-JSON_Value parse_json_true(char **source)
+JSON_Value parse_json_true(const char **at)
 {
     JSON_Value json_value = { };
 
-    char *c = *source;
+    const char *target = "true";
 
-    if (strlen(c) >= strlen("true"))
+    if (strlen(*at) >= strlen(target))
     {
-        if (memcmp(c, "true", strlen("true")) == 0)
+        if (memcmp(*at, target, strlen(target)) == 0)
         {
             json_value.type = JSON_Type_True;
         }
     }
 
+    *at += strlen(target);
     return json_value;
 }
 
-JSON_Value parse_json_false(char **source)
+JSON_Value parse_json_false(const char **at)
 {
     JSON_Value json_value = { };
 
-    char *c = *source;
+    const char *target = "false";
 
-    if (strlen(c) >= strlen("false"))
+    if (strlen(*at) >= strlen(target))
     {
-        if (memcmp(c, "false", strlen("false")) == 0)
+        if (memcmp(*at, target, strlen(target)) == 0)
         {
             json_value.type = JSON_Type_False;
         }
     }
 
+    *at += strlen(target);
     return json_value;
 }
 
-JSON_Value parse_json_null(char **source)
+JSON_Value parse_json_null(const char **at)
 {
     JSON_Value json_value = { };
 
-    char *c = *source;
+    const char *target = "null";
 
-    if (strlen(c) >= strlen("null"))
+    if (strlen(*at) >= strlen(target))
     {
-        if (memcmp(c, "null", strlen("null")) == 0)
+        if (memcmp(*at, target, strlen(target)) == 0)
         {
             json_value.type = JSON_Type_Null;
         }
     }
-
+    *at += strlen(target);
     return json_value;
 }
 
@@ -231,73 +243,71 @@ bool is_digit(char c)
     return (c >= '0' && c <= '9') ? true : false;
 }
 
-JSON_Value parse_json_number(const char **source)
+JSON_Value parse_json_number(const char **at)
 {
     JSON_Value json_value = { };
 
     double json_num = 0;
 
-    const char *c = *source;
-
-    s32 num_sign = 1;
-    if (c && *c == '-')
+    s8 num_sign = 1;
+    if (*at && *at[0] == '-')
     {
         num_sign = -1;
-        ++c;
+        ++*at;
     }
-    else if (c && *c == '+')
+    else if (*at && *at[0] == '+')
     {
-        ++c;
+        ++*at;
     }
 
-    u32 number = 0;
-    while (c && is_digit(*c))
+    u64 number = 0;
+    while (*at && is_digit(*at[0]))
     {
         number *= 10;
-        number += (*c - '0');
-        ++c;
+        number += (*at[0] - '0');
+        ++*at;
     }
 
-    u32 fraction = 0;
-    u32 power = 1;
-    if (c && *c == '.')
+    u64 fraction = 0;
+    u64 power = 1;
+    if (*at && *at[0] == '.')
     {
-        ++c;
+        ++*at;
 
-        while (c && is_digit(*c))
+        while (*at && is_digit(*at[0]))
         {
             fraction *= 10;
-            fraction += (*c - '0');
+            fraction += (*at[0] - '0');
             power *= 10;
-            ++c;
+            ++*at;
         }
     }
 
-    u32 exp = 0;
-    s32 exp_sign = 1;
-    if (c && (*c == 'e' || *c == 'E'))
+    u64 exp = 0;
+    s8 exp_sign = 1;
+    if (*at && (*at[0] == 'e' || *at[0] == 'E'))
     {
-        ++c;
+        ++*at;
 
-        if (c && *c == '-')
+        if (*at && *at[0] == '-')
         {
             exp_sign = -1;
-            ++c;
+            ++*at;
         }
-        else if (c && *c == '+')
+        else if (*at && *at[0] == '+')
         {
-            ++c;
+            ++*at;
         }
 
-        while (c && is_digit(*c))
+        while (*at && is_digit(*at[0]))
         {
             exp *= 10;
-            exp += (*c - '0');
-            ++c;
+            exp += (*at[0] - '0');
+            ++*at;
         }
     }
 
-    json_num = (double)number;
+    json_num = number;
     json_num += (double)fraction / (double)power;
 
     if (exp_sign > 0)
@@ -309,10 +319,8 @@ JSON_Value parse_json_number(const char **source)
         json_num /= pow(10, exp);
     }
 
-    json_num *= (double)num_sign;
+    json_num *= num_sign;
 
-
-    *source = c;
 
     json_value.type = JSON_Type_Number;
     json_value.number = json_num;
@@ -320,61 +328,104 @@ JSON_Value parse_json_number(const char **source)
     return json_value;
 }
 
-JSON_Value* parse_json(const char *source)
+JSON_Value parse_json_array(const char **at)
 {
-    JSON_Value *json = (JSON_Value*)malloc(sizeof(JSON_Value));
+    JSON_Value json = {};
+    json.type = JSON_Type_Array;
+    json.array = (JSON_Array*)calloc(1, sizeof(JSON_Array));
 
-    const char *c = source;
+    Assert(*at[0] == '[');
+    ++*at;
 
-    while (c)
+    bool done = false;
+
+    while (*at && !done)
     {
-        while (*c == ' ')
+        switch (*at[0])
         {
-            ++c;
+            case ' ':
+            {
+                ++*at;
+            } break;
+
+            case ']':
+            {
+                ++*at;
+                done = true;
+            } break;
+
+            case ',':
+            {
+                ++*at;
+            } break;
+
+            default:
+            {
+                JSON_Value val = parse_json_value(at);
+                add(json.array, &val);
+            } break;
         }
-
-        switch (*c)
-        {
-            case '{': // object
-            {
-                json->type = JSON_Type_Object;
-                json->object = (JSON_Object*)malloc(sizeof(JSON_Object));
-                //parse_json_object(c, json);
-            } break;
-
-            case '[': // array
-            {
-                //parse_array()
-            } break;
-
-            case '"': // string
-            {
-
-            } break;
-
-            case 't': // true
-            {
-
-            } break;
-
-            case 'f': // false
-            {
-
-            } break;
-
-            case 'n': // null
-            {
-
-            } break;
-
-            default: // number
-            {
-
-            }
-        }
-
-        ++c;
     }
+
+    return json;
+}
+
+
+
+
+JSON_Value parse_json_value(const char **at)
+{
+    JSON_Value res;
+
+    switch (*at[0])
+    {
+        case ' ':
+        {
+            ++*at;
+        } break;
+
+        case '{': // object
+        {
+            // return parse_json_object(&c);
+        } break;
+
+        case '[': // array
+        {
+            res = parse_json_array(at);
+        } break;
+
+        case '"': // string
+        {
+            res = parse_json_string(at);
+        } break;
+
+        case 't': // true
+        {
+            res = parse_json_true(at);
+        } break;
+
+        case 'f': // false
+        {
+            res = parse_json_false(at);
+        } break;
+
+        case 'n': // null
+        {
+            res = parse_json_null(at);
+        } break;
+
+        default: // number
+        {
+            res = parse_json_number(at);
+        } break;
+    }
+
+    return res;
+}
+
+JSON_Value parse_json(const char *source)
+{
+    JSON_Value json = parse_json_value(&source);
 
     return json;
 }
