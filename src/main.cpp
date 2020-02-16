@@ -5,7 +5,9 @@
 #include <string>
 
 #include "gb_utils.h"
-#include "gb_json.h"
+//#include "gb_json.h"
+
+#define GB_JSON_PARSER_IMPL
 #include "gb_json_parser.h"
 
 
@@ -39,9 +41,8 @@ int main(void)
 int main2(void)
 {
 
-    char *input = read_entire_file_in_memory("data/test.json");
-
-    JSON_Value value = parse_json(input);
+    //char *input = read_entire_file_in_memory("data/test.json");
+    //JSON_Value value = parse_json(input);
 
 #if 0
     const char *input = "+9.94758600e+2";

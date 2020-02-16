@@ -12,6 +12,8 @@
     "unicode" : "\u0034",
 
     "autosave" : true,
+    "speedometer" : false,
+    "car" : null,
     "width" : 120,
     "height" : 30,
     "name" : "John",
