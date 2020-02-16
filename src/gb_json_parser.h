@@ -1,10 +1,27 @@
 #ifndef GB_JSON_PARSER_H
 #define GB_JSON_PARSER_H
 
+#include <math.h>
+
 #include <string>
 #include <vector>
+#include <queue>
 
-#include "gb_utils.h"
+typedef signed char        s8;
+typedef short              s16;
+typedef int                s32;
+typedef long long          s64;
+
+typedef unsigned char      byte;
+typedef unsigned char      u8;
+typedef unsigned short     u16;
+typedef unsigned int       u32;
+typedef unsigned long long u64;
+
+static_assert(sizeof(u64) == 8);
+
+#define Assert(cond, msg) if (!(cond)) {printf("[Assertion failed] \"%s\" at '%s':%d\n", msg, __FILE__, __LINE__); *(u32*)0xdeadbeefdeadbeef=0;}
+
 
 enum JSON_Type
 {
@@ -23,18 +40,32 @@ struct JSON_Array;
 
 struct JSON_Value
 {
-    JSON_Type type;
-    union
-    {
-        JSON_Object *object;
-        JSON_Array *array;
-        char string[64];
-        double number;
-    };
+    JSON_Type type = JSON_Type_Unknown;
+
+    JSON_Object* object = nullptr;
+    JSON_Array* array = nullptr;
+    std::string string;
+    double number = 0;
 };
 
-JSON_Value parse_json(const std::string &source);
-JSON_Value parse_json_file(const std::string &filename);
+struct JSON_Object_Pair
+{
+    std::string key;
+    JSON_Value value;
+};
+
+struct JSON_Object
+{
+    std::vector<JSON_Object_Pair> data;
+};
+
+struct JSON_Array
+{
+    std::vector<JSON_Value> data;
+};
+
+static JSON_Value parse_json(const std::string &source);
+//JSON_Value parse_json_file(const std::string &filename);
 
 
 #endif
@@ -47,14 +78,13 @@ enum class JSON_Token_Type : u32
     string, number, True, False, Null,
     object_begin, object_end,
     array_begin, array_end,
-    colon, comma,
-    end_of_tokens
+    colon, comma
 };
 
 struct JSON_Token
 {
     JSON_Token_Type type = JSON_Token_Type::unknown;
-    std::string text = "unknown";
+    std::string text;
     double num = 0;
     u32 line = 0;
     u32 col = 0;
@@ -63,7 +93,7 @@ struct JSON_Token
 struct JSON_Tokenizer
 {
     std::string input;
-    std::vector<JSON_Token> tokens;
+    std::queue<JSON_Token> tokens;
 };
 
 static bool is_digit(char c)
@@ -159,25 +189,9 @@ static double parse_json_number(const char **at)
     return json_num;
 }
 
-static u32 eat_whitespaces(const char **at)
-{
-    u32 skipped = 0;
-
-    while (*at[0] == ' ' ||
-           *at[0] == '\r' ||
-           *at[0] == '\t')
-    {
-        ++skipped;
-        ++*at;
-    }
-
-    return skipped;
-}
-
 static JSON_Tokenizer tokenize_json(const std::string &input)
 {
     JSON_Tokenizer tokenizer;
-    tokenizer.tokens.reserve(1000); // @TODO: tune this parameter?
     tokenizer.input = input;
 
     const char *at = input.data();
@@ -185,10 +199,8 @@ static JSON_Tokenizer tokenize_json(const std::string &input)
     u32 line = 1;
     u32 col = 1;
 
-    while (at && *at)
+    while (*at)
     {
-        col += eat_whitespaces(&at);
-
         JSON_Token token;
         token.line = line;
         token.col = col;
@@ -198,6 +210,19 @@ static JSON_Tokenizer tokenize_json(const std::string &input)
             col = 1;
             ++line;
             ++at;
+            continue;
+        }
+        else if (*at == ' ' ||
+                 *at == '\r' ||
+                 *at == '\t')
+        {
+            while (*at == ' ' ||
+                   *at == '\r' ||
+                   *at == '\t')
+            {
+                ++col;
+                ++at;
+            }
             continue;
         }
         else if (*at == '{')
@@ -243,7 +268,7 @@ static JSON_Tokenizer tokenize_json(const std::string &input)
 
             ++at; // skip last "
             col += (at - begin); // JSON string can only be on one line 
-            tokenizer.tokens.push_back(std::move(token));
+            tokenizer.tokens.push(std::move(token));
             continue;
         }
         else if (*at == ':')
@@ -268,7 +293,7 @@ static JSON_Tokenizer tokenize_json(const std::string &input)
 
                 at += target.length();
                 col += target.length();
-                tokenizer.tokens.push_back(std::move(token));
+                tokenizer.tokens.push(std::move(token));
                 continue;
 
             }
@@ -287,7 +312,7 @@ static JSON_Tokenizer tokenize_json(const std::string &input)
 
                 at += target.length();
                 col += target.length();
-                tokenizer.tokens.push_back(std::move(token));
+                tokenizer.tokens.push(std::move(token));
                 continue;
 
             }
@@ -306,7 +331,7 @@ static JSON_Tokenizer tokenize_json(const std::string &input)
 
                 at += target.length();
                 col += target.length();
-                tokenizer.tokens.push_back(std::move(token));
+                tokenizer.tokens.push(std::move(token));
                 continue;
             }
             // handle error
@@ -322,7 +347,7 @@ static JSON_Tokenizer tokenize_json(const std::string &input)
             token.num = num;
 
             col += (at - begin); // JSON number can only be on one line 
-            tokenizer.tokens.push_back(std::move(token));
+            tokenizer.tokens.push(std::move(token));
             continue;
         }
         else
@@ -334,16 +359,142 @@ static JSON_Tokenizer tokenize_json(const std::string &input)
         ++at;
         ++col;
 
-        tokenizer.tokens.push_back(std::move(token));
+        tokenizer.tokens.push(std::move(token));
     }
-
-    JSON_Token end_of_tokens;
-    end_of_tokens.type = JSON_Token_Type::end_of_tokens;
-    end_of_tokens.text = "end_of_tokens";
-
-    tokenizer.tokens.emplace_back(end_of_tokens);
 
     return tokenizer;
 }
+
+
+static JSON_Value parse_json_value(std::queue<JSON_Token> &tokens);
+
+static JSON_Value parse_json_array(std::queue<JSON_Token>& tokens)
+{
+    JSON_Value json;
+    json.type = JSON_Type_Array;
+    json.array = new JSON_Array();
+
+    while (tokens.front().type != JSON_Token_Type::array_end)
+    {
+        JSON_Value value = parse_json_value(tokens);
+        json.array->data.push_back(std::move(value));
+
+        if (tokens.front().type == JSON_Token_Type::comma)
+        {
+            tokens.pop();
+        }
+    }
+
+    return json;
+}
+
+static JSON_Value parse_json_object(std::queue<JSON_Token> &tokens)
+{
+    JSON_Value json;
+    json.type = JSON_Type_Object;
+    json.object = new JSON_Object();
+
+    while (tokens.front().type != JSON_Token_Type::object_end)
+    {
+        JSON_Object_Pair pair;
+
+        Assert(tokens.front().type == JSON_Token_Type::string, "Expected string as key in json object");
+        pair.key = tokens.front().text;
+        tokens.pop();
+
+        Assert(tokens.front().type == JSON_Token_Type::colon, "Expected colon in json object");
+        tokens.pop();
+
+        pair.value = parse_json_value(tokens);
+
+        json.object->data.push_back(std::move(pair));
+
+        if (tokens.front().type == JSON_Token_Type::comma)
+        {
+            tokens.pop();
+        }
+    }
+
+    return json;
+}
+
+static JSON_Value parse_json_value(std::queue<JSON_Token> &tokens)
+{
+    JSON_Value json;
+
+    const JSON_Token &token = tokens.front();
+
+    switch (token.type)
+    {
+        case JSON_Token_Type::string:
+        {
+            json.type = JSON_Type_String;
+            json.string = token.text;
+        } break;
+
+        case JSON_Token_Type::True:
+        {
+            json.type = JSON_Type_True;
+        } break;
+
+        case JSON_Token_Type::False:
+        {
+            json.type = JSON_Type_False;
+        } break;
+
+        case JSON_Token_Type::Null:
+        {
+            json.type = JSON_Type_Null;
+        } break;
+
+        case JSON_Token_Type::number:
+        {
+            json.type = JSON_Type_Number;
+            json.number = token.num;
+        } break;
+
+        case JSON_Token_Type::array_begin:
+        {
+            tokens.pop();
+            json = parse_json_array(tokens);
+        } break;
+
+        case JSON_Token_Type::object_begin:
+        {
+            tokens.pop();
+            json = parse_json_object(tokens);
+        } break;
+
+        case JSON_Token_Type::object_end:
+        case JSON_Token_Type::array_end:
+        case JSON_Token_Type::colon:
+        case JSON_Token_Type::comma:
+        case JSON_Token_Type::unknown:
+        {
+            Assert(false, "Current token was unexpected!");
+        } break;
+
+        default:
+        {
+            Assert(false, "WTF?!?!");
+        } break;
+    }
+
+    tokens.pop();
+
+    return json;
+}
+
+
+
+static JSON_Value parse_json(const std::string &source)
+{
+    JSON_Tokenizer tokenizer = tokenize_json(source);
+
+    JSON_Value json = parse_json_value(tokenizer.tokens);
+
+    return json;
+}
+
 
 #endif
