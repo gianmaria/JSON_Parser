@@ -3,21 +3,7 @@
 #include <string.h>
 #include <math.h>
 
-#define ArrayCount(a) (sizeof(a)/sizeof(a[0]))
-#define Assert(cond) if (!(cond)) (*(int*)0 = 0)
-
-typedef signed char        s8;
-typedef short              s16;
-typedef int                s32;
-typedef long long          s64;
-
-typedef unsigned char      byte;
-typedef unsigned char      u8;
-typedef unsigned short     u16;
-typedef unsigned int       u32;
-typedef unsigned long long u64;
-
-static_assert(sizeof(u64) == 8);
+#include "gb_utils.h"
 
 enum JSON_Type
 {
@@ -41,7 +27,7 @@ struct JSON_Value
     {
         JSON_Object *object;
         JSON_Array *array;
-        char string[6];
+        char string[64];
         double number;
     };
 };
@@ -54,7 +40,7 @@ struct JSON_Object_Pair
 
 struct JSON_Object
 {
-    JSON_Object_Pair data[8];
+    JSON_Object_Pair data[128];
     u32 count;
 };
 
@@ -66,17 +52,17 @@ void add_pair(JSON_Object *obj, const JSON_Object_Pair *pair)
     }
     else
     {
-        Assert(!"JSON_Object is full!");
+        Assert(false, "JSON_Object is full!");
     }
 }
 
 struct JSON_Array
 {
-    JSON_Value data[8];
+    JSON_Value data[128];
     u32 count;
 };
 
-void add(JSON_Array *arr, const JSON_Value *value)
+void push_back(JSON_Array *arr, const JSON_Value *value)
 {
     if (arr->count < ArrayCount(arr->data))
     {
@@ -84,71 +70,9 @@ void add(JSON_Array *arr, const JSON_Value *value)
     }
     else
     {
-        Assert(!"JSON_Array is full!");
+        Assert(false, "JSON_Array is full!");
     }
 }
-
-
-char *read_entire_file(const char *file_path)
-{
-    char *res = 0;
-
-    FILE *file = fopen(file_path, "rb");
-
-    if (file)
-    {
-        fseek(file, 0, SEEK_END);
-        u64 file_size = (u64)ftell(file);
-        rewind(file);
-
-        res = (char *)malloc(file_size + 1);
-
-        if (res)
-        {
-            u64 read = fread(res, 1, file_size, file);
-
-            if (read == file_size)
-            {
-                res[file_size] = 0;
-            }
-            else
-            {
-                free(res);
-                res = 0;
-            }
-
-            fclose(file);
-        }
-    }
-
-    return res;
-}
-
-
-JSON_Value *new_json_value(enum JSON_Type type)
-{
-    JSON_Value *value = 0;
-
-    value = (JSON_Value *)malloc(sizeof(JSON_Value));
-
-    if (value)
-    {
-        memset(value, 0, sizeof(JSON_Value));
-        value->type = type;
-
-        switch (value->type)
-        {
-            case JSON_Type_Object:
-            {
-                value->object = (JSON_Object *)malloc(sizeof(JSON_Object));
-                memset(value->object, 0, sizeof(JSON_Object));
-            } break;
-        }
-    }
-
-    return value;
-}
-
 
 
 JSON_Value parse_json(const char *source);
@@ -156,6 +80,20 @@ JSON_Value parse_json(const char *source);
 JSON_Value parse_json_value(const char **source);
 
 JSON_Value parse_json_array(const char **source);
+
+static void eat_whitespaces(const char **at)
+{
+    if (*at)
+    {
+        while (*at[0] == ' ' ||
+               *at[0] == '\n' ||
+               *at[0] == '\r' ||
+               *at[0] == '\t')
+        {
+            ++*at;
+        }
+    }
+}
 
 JSON_Value parse_json_string(const char **at)
 {
@@ -166,7 +104,7 @@ JSON_Value parse_json_string(const char **at)
 
     if (*at)
     {
-        Assert(*at[0] == '"');
+        Assert(*at[0] == '"', "");
         ++*at;
 
         while (*at[0] != '"')
@@ -334,20 +272,17 @@ JSON_Value parse_json_array(const char **at)
     json.type = JSON_Type_Array;
     json.array = (JSON_Array*)calloc(1, sizeof(JSON_Array));
 
-    Assert(*at[0] == '[');
+    Assert(*at[0] == '[', "");
     ++*at;
 
     bool done = false;
 
     while (*at && !done)
     {
+        eat_whitespaces(at);
+
         switch (*at[0])
         {
-            case ' ':
-            {
-                ++*at;
-            } break;
-
             case ']':
             {
                 ++*at;
@@ -362,7 +297,7 @@ JSON_Value parse_json_array(const char **at)
             default:
             {
                 JSON_Value val = parse_json_value(at);
-                add(json.array, &val);
+                push_back(json.array, &val);
             } break;
         }
     }
@@ -370,23 +305,62 @@ JSON_Value parse_json_array(const char **at)
     return json;
 }
 
+JSON_Value parse_json_object(const char **at)
+{
+    JSON_Value json;
+    json.type = JSON_Type_Object;
+    json.object = (JSON_Object*)calloc(1, sizeof(JSON_Object));
 
+    Assert(*at[0] == '{', "");
+    ++*at;
+
+    if (*at)
+    {
+        while (*at[0] != '}')
+        {
+            eat_whitespaces(at);
+
+            JSON_Object_Pair pair = {};
+    
+            JSON_Value key = parse_json_string(at);
+            memcpy(pair.key, key.string, strlen(key.string));
+
+            eat_whitespaces(at);
+
+            Assert(*at[0] == ':', "");
+            ++*at;
+
+            eat_whitespaces(at);
+
+            pair.value = parse_json_value(at);
+
+            add_pair(json.object, &pair);
+
+            eat_whitespaces(at);
+
+            if (*at[0] == ',')
+            {
+                ++*at;
+            }
+        }
+    }
+
+
+    return json;
+}
 
 
 JSON_Value parse_json_value(const char **at)
 {
     JSON_Value res;
 
+    eat_whitespaces(at);
+
     switch (*at[0])
     {
-        case ' ':
-        {
-            ++*at;
-        } break;
-
         case '{': // object
         {
-            // return parse_json_object(&c);
+            res = parse_json_object(at);
         } break;
 
         case '[': // array
@@ -414,7 +388,7 @@ JSON_Value parse_json_value(const char **at)
             res = parse_json_null(at);
         } break;
 
-        default: // number
+        default: // number, probably :)
         {
             res = parse_json_number(at);
         } break;

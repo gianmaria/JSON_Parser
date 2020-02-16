@@ -23,5 +23,11 @@
     <ClInclude Include="src\gb_json.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\gb_json_parser.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gb_utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

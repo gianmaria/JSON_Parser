@@ -1,9 +1,47 @@
 #include <stdio.h>
 
-#include "gb_json.h"
+#include <fstream>
+#include <sstream>
+#include <string>
 
-int main()
+#include "gb_utils.h"
+#include "gb_json.h"
+#include "gb_json_parser.h"
+
+
+int main(void)
 {
+    std::ifstream t("data\\easy_test.json", std::ifstream::binary);
+    
+    std::stringstream buffer;
+    buffer << t.rdbuf();
+    
+    std::string file_content = buffer.str();
+
+    const char *input =
+        R"FOO(
+{
+    "autosave" : true,
+    "width" : 120,
+    "height" : 30,
+    "name" : "John",
+    "numbers" : [1,2,3,4,5,6]
+}
+        )FOO";
+ 
+    JSON_Tokenizer tokenizer = tokenize_json(file_content);
+
+
+
+    return 0;
+}
+
+int main2(void)
+{
+
+    char *input = read_entire_file_in_memory("data/test.json");
+
+    JSON_Value value = parse_json(input);
 
 #if 0
     const char *input = "+9.94758600e+2";
@@ -16,8 +54,17 @@ int main()
 #endif // 0
 
 
-#if 1
-    const char *input = R"FOO([true, [false, null, []], 123.45e3, ["gatto", "topo"]])FOO";
+#if 0
+    const char *input = 
+        R"FOO(
+{
+    "autosave" : true,
+    "width" : 120,
+    "height" : 30,
+    "name" : "John",
+    "numbers" : [1,2,3,4,5,6]
+}
+        )FOO";
 
     JSON_Value value = parse_json(input);
 
@@ -34,30 +81,6 @@ int main()
     JSON_Value *json = parse_json(json_input);
 #endif // 0
 
-
-#if 0
-    JSON_Object_Pair p1 = {};
-    memcpy(&p1.key, "autosave", strlen("autosave"));
-    p1.value.type = JSON_Type_True;
-
-    JSON_Object_Pair p2 = {};
-    memcpy(&p2.key, "width", strlen("width"));
-    p2.value.type = JSON_Type_Number;
-    p2.value.number = 120;
-
-    JSON_Object_Pair p3 = {};
-    memcpy(&p3.key, "name", strlen("name"));
-    p3.value.type = JSON_Type_String;
-    memcpy(&p3.value.string, "John", strlen("John"));
-
-
-    JSON_Value *json = new_json_value(JSON_Type_Object);
-    json->object->add_pair(&p1);
-    json->object->add_pair(&p2);
-    json->object->add_pair(&p3);
-
-    free(json);
-#endif // 0
 
     return 0;
 }
