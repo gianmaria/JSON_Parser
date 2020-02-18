@@ -20,8 +20,11 @@ typedef unsigned long long u64;
 
 static_assert(sizeof(u64) == 8);
 
-#define Assert(cond, msg) if (!(cond)) {printf("[Assertion failed] \"%s\" at '%s':%d\n", msg, __FILE__, __LINE__); *(u32*)0xdeadbeefdeadbeef=0;}
-
+#ifdef NDEBUG
+    #define Assert(cond, msg) (void)0;
+#else
+    #define Assert(cond, msg) if (!(cond)) {printf("[Assertion failed] \"%s\" at '%s':%d\n", msg, __FILE__, __LINE__); *(u32*)0xdeadbeefdeadbeef=0;}
+#endif
 
 enum JSON_Type
 {
@@ -489,9 +492,19 @@ static JSON_Value parse_json_value(std::queue<JSON_Token> &tokens)
 
 static JSON_Value parse_json(const std::string &source)
 {
+    //high_resolution_clock::time_point t1 = high_resolution_clock::now();
     JSON_Tokenizer tokenizer = tokenize_json(source);
+    //high_resolution_clock::time_point t2 = high_resolution_clock::now();
+    //duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
+    //cout << "[mine] tokenize_json in " << time_span.count() << "s" << endl;
+    //getchar();
 
+    //t1 = high_resolution_clock::now();
     JSON_Value json = parse_json_value(tokenizer.tokens);
+    //t2 = high_resolution_clock::now();
+    //time_span = duration_cast<duration<double>>(t2 - t1);
+    //cout << "[mine] parse_json_value in " << time_span.count() << "s" << endl;
+    //getchar();
 
     return json;
 }

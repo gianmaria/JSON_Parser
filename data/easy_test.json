@@ -1,21 +1,3 @@
- {
-    "test1" : "\"green\"",
-    
-    "quotation mark" : "\"",
-    "reverse solidus" : "\\",
-    "solidus" : "\/",
-    "backspace" : "\b",
-    "formfeed" : "\f",
-    "new line" : "\n",
-    "carrige return" : "\r",
-    "horizontal tab" : "\t",
-    "unicode" : "\u0034",
-
-    "autosave" : true,
-    "speedometer" : false,
-    "car" : null,
-    "width" : 120,
-    "height" : 30,
-    "name" : "John",
-    "numbers" : [1,2,3,4,5,6]
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:155160e7f255e14e74f52a79e7e8ddc00a97622fcd8a07099973e04bfd70f536
+size 449
