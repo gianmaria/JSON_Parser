@@ -120,7 +120,7 @@ int main(void)
     //test_things<JSON_Token>("JSON_Token");
     //return 0;
 
-    const char* citylots = read_entire_file_in_memory("data\\citylots_txt.txt");
+    const char* citylots = read_entire_file_in_memory("data\\citylots.json");
 
     if (!citylots)
     {
@@ -152,7 +152,7 @@ int main(void)
 #endif // 0
 
 
-#if 1
+#if 0
     {
         std::string test_input;
         test_input = R"FOO("C:\\Windows\\System32 \/root\/user\/bin \"some folder\\illegal\/path\n\" \b \f \n \r \t \uABCD ciao")FOO";
@@ -189,7 +189,7 @@ int main(void)
                      }
         )FOO";
 
-        test_input = R"FOO(
+        test_input = R"FOO( 
 
 {
     "omega" : "\u03A9",
@@ -211,6 +211,8 @@ int main(void)
         const char *input = test_input.c_str();
         input = citylots;
 
+        input = read_entire_file_in_memory("data\\citylots_txt.txt");
+
         JSON_Value json;
         parse_json(input, &json);
 
@@ -218,16 +220,16 @@ int main(void)
         milliseconds time_span = duration_cast<milliseconds>(t2 - t1);
         cout << "[mine] json parsed in " << time_span.count() << "ms" << endl;
 
-        //if (json.type == JSON_Type_Object)
-        //{
-        //    cout << "obj size is: " << json.object->data.size() << endl;
-        //    if (json.object->data[2].key == "features" &&
-        //        json.object->data[2].value.type == JSON_Type_Array)
-        //    {
-        //        cout << "features array size: " << json.object->data[2].value.array->data.size() << endl;
-        //        int stop = 0;
-        //    }
-        //}
+        if (json.type == JSON_Type_Object)
+        {
+            cout << "obj size is: " << json.object->data.size() << endl;
+            if (json.object->data[2].key == "features" &&
+                json.object->data[2].value.type == JSON_Type_Array)
+            {
+                cout << "features array size: " << json.object->data[2].value.array->data.size() << endl;
+                int stop = 0;
+            }
+        }
     }
 #endif // 0
 
@@ -239,18 +241,21 @@ int main(void)
 
         Document document;
         high_resolution_clock::time_point t1 = high_resolution_clock::now();
-        
+
         document.Parse<kParseIterativeFlag>(input);
-        
+
         high_resolution_clock::time_point t2 = high_resolution_clock::now();
         seconds time_span_s = duration_cast<seconds>(t2 - t1);
         milliseconds time_span_ms = duration_cast<milliseconds>(t2 - t1);
 
         cout << "[rapidjson iterative] json parsed in " << time_span_s.count() << "s " << time_span_ms.count() << "ms" << endl;
     }
+#endif // 0
 
+
+#if 1
     {
-        const char *input = citylots;
+        const char *input = read_entire_file_in_memory("data\\citylots_txt.txt");;
 
         Document document;
         high_resolution_clock::time_point t1 = high_resolution_clock::now();
@@ -278,14 +283,14 @@ int main(void)
                 cout << "size: " << features.Size() << endl;
             }
 
-            //for (auto& v : features.GetArray())
-            //{
-            //    if (v.IsObject())
-            //    {
-            //        const auto& feature = v.GetObject();
-            //        cout << "member count: " << feature.MemberCount() << endl;
-            //    }
-            //}
+            for (auto& v : features.GetArray())
+            {
+                if (v.IsObject())
+                {
+                    const auto& feature = v.GetObject();
+                    //cout << "member count: " << feature.MemberCount() << endl;
+                }
+            }
 
         }
     }

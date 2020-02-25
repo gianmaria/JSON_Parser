@@ -59,12 +59,12 @@ struct JSON_Object_Pair
 
 struct JSON_Object
 {
-    std::vector<JSON_Object_Pair> data;
+    std::vector<JSON_Object_Pair> data; // @NOTE: rename as pairs?
 };
 
 struct JSON_Array
 {
-    std::vector<JSON_Value> data;
+    std::vector<JSON_Value> data; // @NOTE: rename as values?
 };
 
 static JSON_Value parse_json(const std::string &source);
@@ -127,7 +127,7 @@ static bool is_number(const char *c)
     return is_number;
 }
 
-static double parse_json_number(const char **at)
+static double parse_number(const char **at)
 {
     s8 num_sign = 1;
     if (*at && 
@@ -206,6 +206,24 @@ static double parse_json_number(const char **at)
     json_num *= num_sign;
 
     return json_num;
+}
+
+
+static void parse_json_value(const char** at, JSON_Value* json);
+
+static void parse_json_number(const char **at, JSON_Value *json)
+{
+    if (is_number(*at)) // all numbers are treated as double
+    {
+        json->type = JSON_Type_Number;
+        json->number = parse_number(at);
+    }
+    else
+    {
+        Assert(false, "Expected number!");
+    }
+
+    eat_json_whitespaces(at);
 }
 
 // @NOTE: supported ascii input only
@@ -307,10 +325,56 @@ static void parse_json_string(const char **at, JSON_Value *json)
     ++*at; // skip closing "
 }
 
-static void parse_json_value(const char** at, JSON_Value* json);
 
+static void parse_json_true(const char **at, JSON_Value *json)
+{
+    if (strlen(*at) >= 4 &&
+        memcmp(*at, "true", 4) == 0)
+    {
+        json->type = JSON_Type_True;
+        *at += 4;
+    }
+    else
+    {
+        Assert(false, "Expected true");
+    }
 
-static void parse_json_array(const char** at, JSON_Value* json)
+    eat_json_whitespaces(at);
+}
+
+static void parse_json_false(const char **at, JSON_Value *json)
+{
+    if (strlen(*at) >= 5 &&
+        memcmp(*at, "false", 5) == 0)
+    {
+        json->type = JSON_Type_False;
+        *at += 5;
+    }
+    else
+    {
+        Assert(false, "Expected false");
+    }
+
+    eat_json_whitespaces(at);
+}
+
+static void parse_json_null(const char **at, JSON_Value *json)
+{
+    if (strlen(*at) >= 4 &&
+        memcmp(*at, "null", 4) == 0)
+    {
+        json->type = JSON_Type_Null;
+        *at += 4;
+    }
+    else
+    {
+        Assert(false, "Expected null");
+    }
+
+    eat_json_whitespaces(at);
+}
+
+static __forceinline void parse_json_array(const char** at, JSON_Value* json)
 {
     json->type = JSON_Type_Array;
     json->array = new JSON_Array();
@@ -337,9 +401,11 @@ static void parse_json_array(const char** at, JSON_Value* json)
     }
 
     ++*at; // skip ]
+
+    eat_json_whitespaces(at);
 }
 
-static void parse_json_object(const char** at, JSON_Value* json)
+static __forceinline void parse_json_object(const char** at, JSON_Value* json)
 {
     json->type = JSON_Type_Object;
     json->object = new JSON_Object();
@@ -376,86 +442,36 @@ static void parse_json_object(const char** at, JSON_Value* json)
         {
             ++*at;
         }
+
         eat_json_whitespaces(at);
     }
 
     ++*at; // skip }
+
+    eat_json_whitespaces(at);
 }
 
 
-
-
-static void parse_json_value(const char** at, JSON_Value* json)
+// @TODO: make this function as small as possible 
+static void __forceinline parse_json_value(const char** at, JSON_Value* json)
 {
-    eat_json_whitespaces(at);
-
-    char c = (*at)[0];
-
-    switch(c)
+    switch((**at))
     {
-        case '{':
-        {
-            parse_json_object(at, json);
-        } break;
-
-        case '[':
-        {
-            parse_json_array(at, json);
-        } break;
-
-        case '"':
-        {
-            parse_json_string(at, json);
-        } break;
-
-        case 't':
-        case 'f':
-        case 'n':
-        {
-            if (strlen(*at) >= 4 && 
-                memcmp(*at, "true", 4) == 0)
-            {
-                json->type = JSON_Type_True;
-                *at += 4;
-            }
-            else if (strlen(*at) >= 5 && 
-                     memcmp(*at, "false", 5) == 0)
-            {
-                json->type = JSON_Type_False;
-                *at += 5;
-            }
-            else if (strlen(*at) >= 4 && 
-                     memcmp(*at, "null", 4) == 0)
-            {
-                json->type = JSON_Type_Null;
-                *at += 4;
-            }
-            else
-            {
-                Assert(false, "Expected true, false or null");
-            }
-
-        } break;
-
-        default:
-        {
-            if (is_number(*at)) // all numbers are treated as double
-            {
-                json->type = JSON_Type_Number;
-                json->number = parse_json_number(at);
-            }
-            else
-            {
-                Assert(false, "Expected number!");
-            }
-        }
+        case 'n': parse_json_null(at, json); break;
+        case 't': parse_json_true(at, json); break;
+        case 'f': parse_json_false(at, json); break;
+        case '"': parse_json_string(at, json); break;
+        case '{': parse_json_object(at, json); break;
+        case '[': parse_json_array(at, json); break;
+        default: parse_json_number(at, json);
     }
-
 }
 
 
 static void parse_json(const char* source, JSON_Value *json)
 {
+    eat_json_whitespaces(&source);
+
     parse_json_value(&source, json);
 }
 
